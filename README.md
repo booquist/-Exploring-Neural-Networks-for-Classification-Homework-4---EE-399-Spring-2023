@@ -136,8 +136,7 @@ model.compile(optimizer=optimizer, loss='mean_squared_error')
 model.fit(X_train_new, Y_train_new, epochs=1000, verbose=0)
 ```
 
-**
-Visualizing the Fitted Model and Comparing the Performance** <br>
+**Visualizing the Fitted Model and Comparing the Performance** <br>
 After training the model with custom activation functions, we calculate the fitted values using the neural network and visualize the original data points along with the fitted curve.
 
 ```python
@@ -160,3 +159,183 @@ plt.title('Fitting the model with a 3-layer feedforward neural network')
 plt.show()
 ```
 In the comparison, the model fit using the three-layer feedforward neural network has a slightly smaller mean squared error than our data from homework 1, and looks much more generalizable, closer to a simple line through the data. The issues our very basic models from homework 1 suffered from was primarily overfitting, but with this method, it seems we may suffer from underfitting.
+
+**Extras - Creating the Custom Activation Functions and the Neural Network Model** <br>
+We start by initializing a neural network model with three layers, including two custom activation functions (sine and cosine): 
+
+```python
+# Create custom sine/cos activation function
+sine_activation = tf.keras.layers.Activation(lambda x: tf.math.sin(x) + x)
+cos_activation = tf.keras.layers.Activation(lambda x: tf.math.cos(x) + x)
+
+# Create a neural network model with the custom activation functions
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(2, input_dim=1, activation='linear'),
+    tf.keras.layers.Dense(10),
+    sine_activation,
+    tf.keras.layers.Dense(10),
+    cos_activation, 
+    tf.keras.layers.Dense(1, activation='relu')
+])
+```
+**Implementing Custom Activation Functions with Multiple Parameters** <br>
+We create a custom activation function with multiple parameters and add it to the neural network model. We then compile the model with a custom learning rate using the Adam optimizer, and fit the model on the dataset: 
+
+```python
+class CustomActivation(tf.keras.layers.Layer):
+    def __init__(self):
+        super(CustomActivation, self).__init__()
+
+    def build(self, input_shape):
+        self.A = self.add_weight(name='A', shape=(), initializer='ones', trainable=True)
+        self.B = self.add_weight(name='B', shape=(), initializer='ones', trainable=True)
+        self.C = self.add_weight(name='C', shape=(), initializer='ones', trainable=True)
+        self.D = self.add_weight(name='D', shape=(), initializer='zeros', trainable=True)
+
+    def call(self, inputs):
+        return self.A * tf.math.cos(self.B * inputs) + self.C * inputs + self.D
+
+custom_activation = CustomActivation()
+
+```
+
+Then, we implement techniques to improve our overfitting, such as dynamic learning rates and a dropout layer to reduce overfitting: 
+
+```python
+# Define a learning rate schedule
+def lr_schedule(epoch=0):
+    if epoch < 10:
+        lr = 0.1
+    elif epoch < 100:
+        lr = 0.01
+    else:
+        lr = 0.005
+    return lr
+
+# Create a neural network model with the custom sine activation function
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(20, input_dim=1, activation=custom_activation),
+    Dropout(0.05), #Implement dropout layer
+    tf.keras.layers.Dense(10, activation=custom_activation),
+    tf.keras.layers.Dense(5, activation='relu'),
+    tf.keras.layers.Dense(1, activation='linear')
+])
+
+# Instantiate the Adam optimizer with a custom learning rate
+optimizer = Adam(learning_rate=lr_schedule)
+
+# Compile the model
+model.compile(optimizer=optimizer, loss='mean_squared_error')
+```
+
+This yields much better results as we'll discuss in section IV. <br>
+
+In the next section, we explore the application of various machine learning models on the MNIST dataset, such as Feedforward Neural Networks, LSTM, SVM, and Decision Trees. The performance of these models is compared using accuracy metrics.
+
+**Import Libraries and Load Data** <br>
+```python
+from tensorflow.keras.datasets import mnist
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+(X_train, y_train), (X_test, y_test) = mnist.load_data()
+```
+**Preprocess the Data** <br>
+In this step, we reshape the images into vectors and normalize the data by dividing the pixel values by 255, which is the maximum pixel intensity value. Then, we one-hot encode the labels to make them compatible with the machine learning models.
+
+```python
+# Reshape the images to vectors and normalize the data
+X_train = X_train.reshape(-1, 28 * 28).astype("float32") / 255
+X_test = X_test.reshape(-1, 28 * 28).astype("float32") / 255
+
+# One-hot encode the labels
+y_train = tf.keras.utils.to_categorical(y_train, 10)
+y_test = tf.keras.utils.to_categorical(y_test, 10)
+```
+**Perform PCA** <br>
+We apply Principal Component Analysis (PCA) to reduce the dimensionality of the dataset. This helps to speed up training while preserving most of the information. In this case, we choose 20 principal components.
+```python
+from sklearn.decomposition import PCA
+
+pca = PCA(n_components=20)
+X_train_pca = pca.fit_transform(X_train)
+X_test_pca = pca.transform(X_test)
+```
+**Create a Feedforward Neural Network Model** <br>
+A Feedforward Neural Network (FFNN) model is created with three layers: an input layer with 128 neurons and ReLU activation, a hidden layer with 64 neurons and ReLU activation, and an output layer with 10 neurons and softmax activation for multi-class classification. The model is compiled with the Adam optimizer and categorical cross-entropy loss function.
+
+```python
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+
+ffnn = Sequential([
+    Dense(128, activation="relu", input_shape=(20,)),
+    Dense(64, activation="relu"),
+    Dense(10, activation="softmax")
+])
+
+ffnn.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
+ffnn.fit(X_train_pca, y_train, epochs=10, batch_size=32, validation_split=0.2)
+```
+**Create an LSTM Model** <br>
+A Long Short-Term Memory (LSTM) model is created with one LSTM layer containing 64 neurons and ReLU activation, followed by an output layer with 10 neurons and softmax activation for multi-class classification. The input data is reshaped to fit the LSTM model requirements. The model is compiled with the Adam optimizer and categorical cross-entropy loss function.
+
+```python
+from tensorflow.keras.layers import LSTM, Reshape
+
+X_train_pca_lstm = X_train_pca.reshape(-1, 4, 5)
+X_test_pca_lstm = X_test_pca.reshape(-1, 4, 5)
+
+lstm_model = Sequential([
+    LSTM(64, activation="relu", input_shape=(4, 5)),
+    Dense(10, activation="softmax")
+])
+
+lstm_model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
+lstm_model.fit(X_train_pca_lstm, y_train, epochs=10, batch_size=32, validation_split=0.2)
+```
+**Create an SVM Model** <br>
+A Support Vector Machine (SVM) model is created using the radial basis function (RBF) kernel. The model is trained on the PCA-transformed data. Accuracy scores are calculated for both training and testing datasets.
+```python
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
+
+svm = SVC(kernel="rbf")
+svm.fit(X_train_pca, np.argmax(y_train, axis=1))
+
+y_pred_train_svm = svm.predict(X_train_pca)
+y_pred_test_svm = svm.predict(X_test_pca)
+
+accuracy_train_svm = accuracy_score(np.argmax(y_train, axis=1), y_pred_train_svm)
+accuracy_test_svm = accuracy_score(np.argmax(y_test, axis=1), y_pred_test_svm)
+```
+**Create a Decision Tree Model** <br>
+A Decision Tree Classifier model is created and trained on the PCA-transformed data. Accuracy scores are calculated for both training and testing datasets.
+
+```python
+from sklearn.tree import DecisionTreeClassifier
+
+dt = DecisionTreeClassifier()
+dt.fit(X_train_pca, np.argmax(y_train, axis=1))
+
+y_pred_train_dt = dt.predict(X_train_pca)
+y_pred_test_dt = dt.predict(X_test_pca)
+
+accuracy_train_dt = accuracy_score(np.argmax(y_train, axis=1), y_pred_train_dt)
+accuracy_test_dt = accuracy_score(np.argmax(y_test, axis=1), y_pred_test_dt)
+```
+**Evaluate and Compare the Models** <br>
+The Feedforward Neural Network, LSTM, SVM, and Decision Tree models are evaluated using their respective accuracy scores on the test dataset. The results are then compared to assess the performance of each model.
+
+```python
+ffnn_accuracy = ffnn.evaluate(X_test_pca, y_test, verbose=0)[1]
+lstm_accuracy = lstm_model.evaluate(X_test_pca_lstm, y_test, verbose=0)[1]
+
+print("Feedforward Neural Network Accuracy: ", ffnn_accuracy)
+print("LSTM Accuracy: ", lstm_accuracy)
+print("SVM Accuracy: ", accuracy_test_svm)
+print("Decision Tree Accuracy: ", accuracy_test_dt)
+```
+
+
+
