@@ -337,5 +337,158 @@ print("SVM Accuracy: ", accuracy_test_svm)
 print("Decision Tree Accuracy: ", accuracy_test_dt)
 ```
 
+## IV. Computational Results
+By creating a feed-forward neural network with basic parameters, we were able to achieve a decent result, slightly beating our simple Scipy.minimize method given by: 
+```python
+# Given data
+X = np.arange(0, 31)
+Y = np.array([30, 35, 33, 32, 34, 37, 39, 38, 36, 36, 37, 39, 42, 45, 45, 41,
+              40, 39, 42, 44, 47, 49, 50, 49, 46, 48, 50, 53, 55, 54, 53])
 
+# Model function
+def f(x, A, B, C, D):
+    return A * np.cos(B * x) + C * x + D
 
+# Error function
+def error(params, x, y):
+    A, B, C, D = params
+    return np.sum((f(x, A, B, C, D) - y) ** 2) / 4
+
+# Initial guess for parameters A, B, C, and D
+initial_guess = [1, 1, 0.7, 26]
+
+# Minimizing the error function
+result = minimize(error, initial_guess, args=(X, Y))
+
+# Extracting the optimal parameters
+A, B, C, D = result.x
+
+print("Optimal parameters:")
+print(f"A: {A:.4f}, B: {B:.4f}, C: {C:.4f}, D: {D:.4f}")
+
+# Calculate the minimum error
+min_error = error(result.x, X, Y)
+print(f"Minimum error: {min_error:.4f}
+```
+This yields an MSE of 19.66. In our test accuracy, we were able to get MSE of 37.65 for training on the last 20 data points, and an MSE for the test data of 13.93 when we trained on the first and last 10 points. <br>
+
+We can visualize the fit by using the code 
+```python 
+# Calculate the fitted values using the neural network
+fitted_Y = model.predict(X)
+
+# Plot the original data points
+plt.scatter(X, Y, label='Data points', color='blue')
+
+# Plot the fitted curve
+plt.plot(X, fitted_Y, label='Fitted curve', color='red', linewidth=2)
+
+# Customize the plot
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.legend()
+plt.title('Fitting the model with a 3-layer feedforward neural network')
+
+# Display the plot
+plt.show()
+``` 
+, which yields the result: 
+![image](https://user-images.githubusercontent.com/103399658/236591100-ed59a836-c70e-4cb1-bdd4-2db11da09450.png)
+
+The issues our very basic models from homework 1 suffered from was primarily overfitting, but with this method it seems we may suffer from underfitting. 
+
+**Training the Neural Network Model with Custom Activation Functions** <br>
+By optimizing our neural network to work with a custom activation function, we can create a more accurate model. By using sin and cos activation functions given by 
+```python
+sine_activation = tf.keras.layers.Activation(lambda x: tf.math.sin(x) + x)
+cos_activation = tf.keras.layers.Activation(lambda x: tf.math.cos(x) + x)
+```
+we can obtain a result that looks like: 
+![image](https://user-images.githubusercontent.com/103399658/236591209-30223880-ff35-45a9-8cbd-a786ecaff519.png)
+
+However, we can see that the model suffers from siginificant overfitting on the outskirts, and the center of the data is fairly inaccurate. <br>
+In order to fix these overfitting issues, I chose to implement a few steps. First of all, I decided to tailor my activation function to fit the parameters that we know exist: 
+```python
+class CustomActivation(tf.keras.layers.Layer):
+    def __init__(self):
+        super(CustomActivation, self).__init__()
+
+    def build(self, input_shape):
+        self.A = self.add_weight(name='A', shape=(), initializer='ones', trainable=True)
+        self.B = self.add_weight(name='B', shape=(), initializer='ones', trainable=True)
+        self.C = self.add_weight(name='C', shape=(), initializer='ones', trainable=True)
+        self.D = self.add_weight(name='D', shape=(), initializer='zeros', trainable=True)
+
+    def call(self, inputs):
+        return self.A * tf.math.cos(self.B * inputs) + self.C * inputs + self.D
+
+# Example usage:
+custom_activation = CustomActivation()
+```
+Next, I defined a dynamic learning rate that shrinks as epochs grow larger, and introduced a dropout layer to try and reduce overfitting: 
+```python
+# Define a learning rate schedule
+def lr_schedule(epoch=0):
+    if epoch < 10:
+        lr = 0.1
+    elif epoch < 100:
+        lr = 0.01
+    else:
+        lr = 0.005
+    return lr
+
+# Create a neural network model with the custom sine activation function
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(20, input_dim=1, activation=custom_activation),
+    Dropout(0.05), #Implement dropout layer
+    tf.keras.layers.Dense(10, activation=custom_activation),
+    tf.keras.layers.Dense(5, activation='relu'),
+    tf.keras.layers.Dense(1, activation='linear')
+])
+
+# Instantiate the Adam optimizer with a custom learning rate
+optimizer = Adam(learning_rate=lr_schedule)
+
+# Compile the model
+model.compile(optimizer=optimizer, loss='mean_squared_error')
+```
+This yields a model that fits the data much better, and we don't see nearly the same amount of overfitting: 
+![image](https://user-images.githubusercontent.com/103399658/236591346-4294b3a2-31b8-40fd-8688-7daa26dab68f.png)
+
+**MNIST** <br>
+
+Moving on the MNIST dataset, we were tasked with comparing the performance of FF Neural Net, LSTM, SVM, and Decision Tree models. The results here were interesting. We found that SVM performed the best, while FF Neural Nets and LSTM performed nearly identically, and Decision Trees performed quite poorly: 
+```
+Feedforward Neural Network Accuracy:  0.9699000120162964
+LSTM Accuracy:  0.9623000025749207
+SVM Accuracy:  0.9755
+Decision Tree Accuracy:  0.8463
+```
+In order to get a sense of the shortcomings of each model, I also output the least and most accurate digits for each model: 
+```
+Feedforward Neural Network:
+Most accurately predicted digit: 1 - Accuracy: 99.12%
+Least accurately predicted digit: 9 - Accuracy: 94.45%
+
+LSTM:
+Most accurately predicted digit: 1 - Accuracy: 99.12%
+Least accurately predicted digit: 9 - Accuracy: 92.07%
+
+SVM:
+Most accurately predicted digit: 1 - Accuracy: 99.38%
+Least accurately predicted digit: 9 - Accuracy: 95.24%
+
+Decision Tree:
+Most accurately predicted digit: 1 - Accuracy: 97.00%
+Least accurately predicted digit: 8 - Accuracy: 76.28%
+```
+This demonstrates the difficulty of the decision tree model at differentiating between certain digits. 
+
+## V. Summary and Conclusions
+In this project, we explored various machine learning models to fit a dataset and classify the MNIST dataset. We started with a feed-forward neural network with basic parameters and achieved a decent result, slightly better than the simple Scipy.minimize method. The mean squared error (MSE) for the test data was 13.93. However, our initial model suffered from underfitting. <br>
+
+To improve our model, we introduced custom activation functions (sine and cosine), which helped us create a more accurate model, but it suffered from overfitting. To address this issue, we implemented a custom activation function tailored to the problem, used a dynamic learning rate, and introduced a dropout layer. These modifications produced a better-fitting model with less overfitting. <br>
+
+For the MNIST dataset, we compared the performance of feed-forward neural networks, LSTM, SVM, and decision tree models. The SVM model performed the best, followed by FF Neural Net and LSTM models, which performed nearly identically. The decision tree model had the poorest performance. We also analyzed the most and least accurately predicted digits for each model, revealing the challenges faced by the decision tree model in differentiating certain digits. <br>
+
+In conclusion, the appropriate selection of machine learning models and optimization techniques is crucial for achieving better results. Customization and fine-tuning of model parameters and activation functions can significantly improve model performance and reduce overfitting. Additionally, comparing different models' performance on a specific task, like the MNIST dataset, can provide valuable insights into each model's strengths and weaknesses.
